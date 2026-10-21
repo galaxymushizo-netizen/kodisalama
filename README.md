@@ -25,7 +25,7 @@
 - **👥 Wapangaji (Tenants)** — full tenant records with NIDA, deposit, move-in date and room assignment; one active tenant per room is enforced server-side.
 - **💰 Malipo (Payments)** — record payments via cash, M-Pesa, Tigo Pesa, Airtel Money or bank with period tracking and references.
 - **⚠️ Madeni (Debts)** — automatic rent-debt computation from move-in date vs. payments, with partial/overdue status per tenant.
-- **💬 SMS / Risiti** — generate Swahili SMS receipts and payment reminders from customizable templates, with character/SMS-count estimates ready for any SMS gateway.
+- **💬 SMS / Risiti** — generate Swahili SMS receipts and payment reminders from customizable templates. Send instantly through the **Africa's Talking gateway** (per-landlord API key, sandbox mode for free testing, delivery history) or hand off to WhatsApp / the phone's SMS app.
 - **📄 Mikataba (Contracts)** — editable Swahili tenancy contract clauses with default duration and payment interval; generates a complete contract data pack per tenant.
 - **🛟 Backup & Restore** — one-click JSON export/import of all data, plus a guarded "wipe all" action. Your data stays yours.
 

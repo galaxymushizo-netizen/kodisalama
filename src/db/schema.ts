@@ -127,6 +127,46 @@ export const smsTemplates = pgTable(
   (t) => [index("sms_templates_owner_idx").on(t.ownerId)]
 );
 
+/** Per-landlord SMS gateway credentials (Africa's Talking). The API key is
+ * write-only: it is never returned to the client, only used server-side. */
+export const smsConfig = pgTable(
+  "sms_config",
+  {
+    id: serial("id").primaryKey(),
+    ownerId: integer("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    provider: text("provider").notNull().default("africastalking"),
+    username: text("username").notNull(),
+    apiKey: text("api_key").notNull(),
+    senderId: text("sender_id"), // alphanumeric sender name; null = provider default
+    sandbox: boolean("sandbox").notNull().default(true),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [index("sms_config_owner_idx").on(t.ownerId)]
+);
+
+/** History of SMS sent through the gateway, for receipts and accountability. */
+export const smsLogs = pgTable(
+  "sms_logs",
+  {
+    id: serial("id").primaryKey(),
+    ownerId: integer("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tenantId: integer("tenant_id").references(() => tenants.id),
+    phone: text("phone").notNull(),
+    message: text("message").notNull(),
+    kind: text("kind").notNull().default("receipt"), // receipt | reminder | custom
+    status: text("status").notNull().default("sent"), // sent | failed
+    providerRef: text("provider_ref"), // provider message id, when accepted
+    cost: text("cost"), // raw provider cost string, e.g. "TZS 15.0000"
+    errorText: text("error_text"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (t) => [index("sms_logs_owner_idx").on(t.ownerId)]
+);
+
 export type User = typeof users.$inferSelect;
 export type LandlordProfile = typeof landlordProfile.$inferSelect;
 export type Room = typeof rooms.$inferSelect;
@@ -134,3 +174,5 @@ export type Tenant = typeof tenants.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type ContractSettings = typeof contractSettings.$inferSelect;
 export type SmsTemplate = typeof smsTemplates.$inferSelect;
+export type SmsConfig = typeof smsConfig.$inferSelect;
+export type SmsLog = typeof smsLogs.$inferSelect;

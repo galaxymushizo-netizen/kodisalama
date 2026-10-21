@@ -7,6 +7,7 @@ import {
   Field,
   TextArea,
   Select,
+  TextInput,
   PrimaryButton,
   SecondaryButton,
 } from "@/components/Modal";
@@ -29,7 +30,25 @@ type Payment = {
   reference: string | null;
 };
 
-type Tab = "receipt" | "reminder" | "templates";
+type GatewayState = {
+  configured: boolean;
+  username?: string;
+  senderId?: string | null;
+  sandbox?: boolean;
+};
+
+type SmsLogRow = {
+  id: number;
+  phone: string;
+  message: string;
+  kind: string;
+  status: string;
+  cost: string | null;
+  errorText: string | null;
+  createdAt: string;
+};
+
+type Tab = "receipt" | "reminder" | "templates" | "gateway";
 
 export default function SmsPage() {
   const { toast } = useToast();
@@ -46,6 +65,16 @@ export default function SmsPage() {
   const [templates, setTemplates] = useState({ receipt: "", reminder: "" });
   const [savingTpl, setSavingTpl] = useState(false);
 
+  // Gateway state
+  const [gateway, setGateway] = useState<GatewayState>({ configured: false });
+  const [cfgUsername, setCfgUsername] = useState("");
+  const [cfgApiKey, setCfgApiKey] = useState("");
+  const [cfgSenderId, setCfgSenderId] = useState("");
+  const [cfgSandbox, setCfgSandbox] = useState(true);
+  const [savingConfig, setSavingConfig] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [logs, setLogs] = useState<SmsLogRow[]>([]);
+
   const loadTenants = useCallback(async () => {
     const res = await fetch("/api/tenants?status=active");
     if (res.ok) setTenants(await res.json());
@@ -56,10 +85,33 @@ export default function SmsPage() {
     if (res.ok) setTemplates(await res.json());
   }, []);
 
+  const loadConfig = useCallback(async () => {
+    const res = await fetch("/api/sms/config");
+    if (res.ok) {
+      const data: GatewayState = await res.json();
+      setGateway(data);
+      if (data.configured) {
+        setCfgUsername(data.username ?? "");
+        setCfgSenderId(data.senderId ?? "");
+        setCfgSandbox(data.sandbox ?? true);
+      }
+    }
+  }, []);
+
+  const loadLogs = useCallback(async () => {
+    const res = await fetch("/api/sms/logs");
+    if (res.ok) setLogs(await res.json());
+  }, []);
+
   useEffect(() => {
     loadTenants();
     loadTemplates();
-  }, [loadTenants, loadTemplates]);
+    loadConfig();
+  }, [loadTenants, loadTemplates, loadConfig]);
+
+  useEffect(() => {
+    if (tab === "gateway") loadLogs();
+  }, [tab, loadLogs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,7 +169,7 @@ export default function SmsPage() {
 
   // Auto-generate when tenant/payment/tab changes
   useEffect(() => {
-    if (!tenantId || tab === "templates") return;
+    if (!tenantId || tab === "templates" || tab === "gateway") return;
     generate(tab === "receipt" ? "receipt" : "reminder");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenantId, paymentId, tab]);
@@ -151,6 +203,41 @@ export default function SmsPage() {
     window.open(`sms:${phone}?body=${encodeURIComponent(message)}`, "_self");
   }
 
+  async function sendViaGateway() {
+    if (!tenantId) {
+      toast("Chagua mpangaji", "error");
+      return;
+    }
+    if (!gateway.configured) {
+      toast("Sanidi Gateway ya SMS kwanza (kichupo cha Gateway)", "error");
+      setTab("gateway");
+      return;
+    }
+    setSending(true);
+    try {
+      const res = await fetch("/api/sms/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          message,
+          kind: tab === "reminder" ? "reminder" : "receipt",
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        toast(
+          `SMS imetumwa kwa ${data.to}${data.cost ? ` — gharama: ${data.cost}` : ""}`
+        );
+      } else {
+        toast(data.error || "Imeshindwa kutuma SMS", "error");
+      }
+      if (tab === "gateway") loadLogs();
+    } finally {
+      setSending(false);
+    }
+  }
+
   async function saveTemplates() {
     setSavingTpl(true);
     try {
@@ -174,17 +261,44 @@ export default function SmsPage() {
     }
   }
 
+  async function saveConfig() {
+    setSavingConfig(true);
+    try {
+      const res = await fetch("/api/sms/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: cfgUsername,
+          apiKey: cfgApiKey,
+          senderId: cfgSenderId || null,
+          sandbox: cfgSandbox,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast(data.error || "Imeshindwa", "error");
+        return;
+      }
+      setCfgApiKey("");
+      await loadConfig();
+      toast("Gateway imehifadhiwa");
+    } finally {
+      setSavingConfig(false);
+    }
+  }
+
   const tabs: { id: Tab; label: string }[] = [
     { id: "receipt", label: "Risiti ya Malipo" },
     { id: "reminder", label: "Kikumbusho cha Kodi" },
     { id: "templates", label: "Badili Maneno (Templates)" },
+    { id: "gateway", label: "Gateway (Tuma Moja Kwa Moja)" },
   ];
 
   return (
     <div>
       <PageHeader
         title="Jenereta ya SMS na Risiti"
-        subtitle="Tengeneza risiti ya malipo au kikumbusho cha kodi na mtumie mpangaji moja kwa moja kupitia WhatsApp au SMS."
+        subtitle="Tengeneza risiti ya malipo au kikumbusho cha kodi, kisha mtumie mpangaji kwa WhatsApp, SMS ya simu, au moja kwa moja kwa Gateway (Africa's Talking)."
       />
 
       <div className="mb-4 flex flex-wrap gap-2">
@@ -235,12 +349,148 @@ export default function SmsPage() {
             Hifadhi Templeti
           </PrimaryButton>
         </Card>
+      ) : tab === "gateway" ? (
+        <>
+          <Card>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="font-display text-base font-bold text-slate-900">
+                Gateway ya SMS — Africa&apos;s Talking
+              </h3>
+              {gateway.configured ? (
+                <span
+                  className={cn(
+                    "rounded-full px-2.5 py-1 text-[11px] font-bold",
+                    gateway.sandbox
+                      ? "bg-amber-50 text-amber-800 ring-1 ring-amber-200"
+                      : "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
+                  )}
+                >
+                  {gateway.sandbox ? "SANDBOX (majaribio)" : "LIVE"}
+                </span>
+              ) : (
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+                  HAIJASANIDIWA
+                </span>
+              )}
+            </div>
+
+            <p className="mb-4 text-sm leading-relaxed text-slate-600">
+              Fungua akaunti bure kwenye{" "}
+              <a
+                href="https://account.africastalking.com/auth/register"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-emerald-700 underline"
+              >
+                africastalking.com
+              </a>
+              , kisha nakili <strong>API key</strong> yako kutoka dashibodi na
+              iweke hapa. Ufunguo huhifadhiwa kwenye server — hauoni tena
+              ukishaokoa. Kwenye <strong>Sandbox</strong> ni bure: ujumbe
+              unatumika kwa namba zilizosajiliwa kwenye dashibodi ya sandbox
+              tu. Kwa <strong>Live</strong> unahitaji salio la SMS, na Sender
+              ID (mfano KODISALAMA) inapaswa kusajiliwa na TCRA.
+            </p>
+
+            <Field label="Username (mfano: sandbox au jina lako la AT)">
+              <TextInput
+                value={cfgUsername}
+                onChange={(e) => setCfgUsername(e.target.value)}
+                placeholder="sandbox"
+                autoComplete="off"
+              />
+            </Field>
+            <Field label="API Key">
+              <TextInput
+                type="password"
+                value={cfgApiKey}
+                onChange={(e) => setCfgApiKey(e.target.value)}
+                placeholder={
+                  gateway.configured
+                    ? "Imehifadhiwa — acha wazi kama hutabadilisha"
+                    : "atsk_..."
+                }
+                autoComplete="new-password"
+              />
+            </Field>
+            <Field label="Sender ID (si lazima; mfano KODISALAMA)">
+              <TextInput
+                value={cfgSenderId}
+                onChange={(e) => setCfgSenderId(e.target.value)}
+                placeholder="KODISALAMA"
+                maxLength={11}
+              />
+            </Field>
+            <label className="mb-4 flex items-center gap-2 text-sm font-medium text-slate-700">
+              <input
+                type="checkbox"
+                checked={cfgSandbox}
+                onChange={(e) => setCfgSandbox(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 accent-emerald-700"
+              />
+              Tumia Sandbox (majaribio bila malipo)
+            </label>
+            <PrimaryButton onClick={saveConfig} loading={savingConfig}>
+              Hifadhi Gateway
+            </PrimaryButton>
+          </Card>
+
+          <Card className="mt-4">
+            <h3 className="mb-3 font-display text-base font-bold text-slate-900">
+              Historia ya SMS (50 za karibuni)
+            </h3>
+            {logs.length === 0 ? (
+              <p className="text-sm text-slate-500">
+                Hakuna SMS zilizotumwa kwa gateway bado.
+              </p>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {logs.map((l) => (
+                  <li key={l.id} className="py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                          l.status === "sent"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : "bg-red-50 text-red-700"
+                        )}
+                      >
+                        {l.status === "sent" ? "Imetumwa" : "Imeshindikana"}
+                      </span>
+                      <span className="text-sm font-semibold text-slate-800">
+                        {l.phone}
+                      </span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-500">
+                        {l.kind}
+                      </span>
+                      {l.cost && (
+                        <span className="text-xs text-slate-500">{l.cost}</span>
+                      )}
+                      <span className="ml-auto text-[11px] text-slate-400">
+                        {new Date(l.createdAt).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="mt-1 line-clamp-2 text-xs text-slate-500">
+                      {l.message}
+                    </p>
+                    {l.errorText && (
+                      <p className="mt-1 text-xs font-medium text-red-600">
+                        {l.errorText}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        </>
       ) : (
         <Card>
           <p className="mb-4 text-sm text-slate-600">
             {tab === "receipt"
-              ? "Tengeneza risiti rasmi ya malipo kwa Kiswahili na mtumie mpangaji kupitia WhatsApp au SMS."
-              : "Tengeneza kikumbusho cha kodi na mtumie mpangaji kupitia WhatsApp au SMS."}
+              ? "Tengeneza risiti rasmi ya malipo kwa Kiswahili na mtumie mpangaji kupitia WhatsApp, SMS ya simu, au Gateway."
+              : "Tengeneza kikumbusho cha kodi na mtumie mpangaji kupitia WhatsApp, SMS ya simu, au Gateway."}
           </p>
 
           <Field label="Chagua Mpangaji" required>
@@ -301,14 +551,21 @@ export default function SmsPage() {
           />
 
           <div className="flex flex-wrap gap-2">
-            <SecondaryButton onClick={copyMessage}>
-              <IconCopy size={16} /> Nakili Ujumbe (Copy)
-            </SecondaryButton>
-            <PrimaryButton onClick={openWhatsApp} disabled={!tenantId}>
-              <IconChat size={16} /> Tuma WhatsApp
+            <PrimaryButton
+              onClick={sendViaGateway}
+              loading={sending}
+              disabled={!tenantId}
+            >
+              <IconChat size={16} /> Tuma kwa Gateway
             </PrimaryButton>
+            <SecondaryButton onClick={openWhatsApp} disabled={!tenantId}>
+              Tuma WhatsApp
+            </SecondaryButton>
             <SecondaryButton onClick={openSms} disabled={!tenantId}>
-              Tuma SMS
+              Tuma SMS ya Simu
+            </SecondaryButton>
+            <SecondaryButton onClick={copyMessage}>
+              <IconCopy size={16} /> Nakili
             </SecondaryButton>
             <SecondaryButton
               onClick={() => generate(tab === "receipt" ? "receipt" : "reminder")}
@@ -317,6 +574,20 @@ export default function SmsPage() {
               {generating ? "Inatengeneza..." : "Tengeneza Upya"}
             </SecondaryButton>
           </div>
+
+          {!gateway.configured && (
+            <p className="mt-3 text-xs text-slate-500">
+              Kidokezo: Sanidi{" "}
+              <button
+                type="button"
+                onClick={() => setTab("gateway")}
+                className="font-semibold text-emerald-700 underline"
+              >
+                Gateway ya SMS
+              </button>{" "}
+              ili kutuma moja kwa moja bila kuhamishia app nyingine.
+            </p>
+          )}
         </Card>
       )}
     </div>
