@@ -279,19 +279,8 @@ export default function MikatabaPage() {
           !showPreview && "no-print"
         )}
       >
-        {/* Official header with Tanzania coat of arms */}
+        {/* Official text header */}
         <div className="mb-6 border-b-2 border-slate-800 pb-6 text-center font-serif">
-          <div className="mb-3 flex justify-center">
-            {/* Official Coat of Arms of Tanzania (Wikimedia Commons) */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/emblems/tanzania-coat-of-arms.svg"
-              alt="Nembo ya Taifa la Jamhuri ya Muungano wa Tanzania"
-              width={120}
-              height={140}
-              className="mx-auto h-32 w-auto object-contain"
-            />
-          </div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-700">
             Jamhuri ya Muungano wa Tanzania
           </p>
