@@ -11,6 +11,8 @@
 
 *Karibu! KodiSalama inawapa wenye nyumba nchini Tanzania mfumo salama wa kusimamia vyumba vyao, wapangaji, malipo ya kodi, mikataba, na risiti za SMS — kwa Kiswahili.*
 
+**🌐 Live app: [kodisalama.vercel.app](https://kodisalama.vercel.app)** — imetumwa kwenye Vercel (Next.js 16) na PostgreSQL ya cloud (Neon). Ufikiaji ni kwa nenosiri la mmiliki.
+
 </div>
 
 ---

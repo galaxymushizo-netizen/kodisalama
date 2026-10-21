@@ -102,9 +102,7 @@ export default function LoginPage() {
           </button>
 
           <p className="mt-4 text-center text-xs leading-relaxed text-slate-400">
-            Weka <code className="rounded bg-slate-100 px-1 py-0.5">APP_PASSWORD</code>{" "}
-            kwenye faili la <code className="rounded bg-slate-100 px-1 py-0.5">.env</code>{" "}
-            ili kuweka neno la siri.
+            Ufikiaji ni kwa mmiliki tu. Ikiwa umesahau neno la siri, wasiliana na msimamizi wa mfumo.
           </p>
         </form>
 
