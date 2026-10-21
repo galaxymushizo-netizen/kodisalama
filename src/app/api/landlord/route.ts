@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { landlordProfile } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, and } from "drizzle-orm";
 import { str, optStr, isPhone } from "@/lib/validate";
+import { getSessionUserId } from "@/lib/auth";
+import { unauthorized } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const rows = await db
       .select()
       .from(landlordProfile)
+      .where(eq(landlordProfile.ownerId, userId))
       .orderBy(desc(landlordProfile.id))
       .limit(1);
     return NextResponse.json(rows[0] ?? null);
@@ -21,6 +27,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const body = await req.json();
     const fullName = str(body.fullName, 120);
@@ -44,6 +53,7 @@ export async function POST(req: NextRequest) {
     const existing = await db
       .select()
       .from(landlordProfile)
+      .where(eq(landlordProfile.ownerId, userId))
       .orderBy(desc(landlordProfile.id))
       .limit(1);
 
@@ -58,12 +68,12 @@ export async function POST(req: NextRequest) {
           location,
           updatedAt: new Date(),
         })
-        .where(eq(landlordProfile.id, existing[0].id))
+        .where(and(eq(landlordProfile.id, existing[0].id), eq(landlordProfile.ownerId, userId)))
         .returning();
     } else {
       result = await db
         .insert(landlordProfile)
-        .values({ fullName, phone, nida, location })
+        .values({ ownerId: userId, fullName, phone, nida, location })
         .returning();
     }
 

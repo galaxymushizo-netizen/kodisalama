@@ -1,19 +1,28 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { rooms, tenants, payments } from "@/db/schema";
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { currentPeriodMonth, currentMonthLabel } from "@/lib/utils";
 import { computeDebts } from "@/lib/debts";
+import { getSessionUserId } from "@/lib/auth";
+import { unauthorized } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
-    const allRooms = await db.select().from(rooms);
-    const allTenants = await db.select().from(tenants);
+    const allRooms = await db.select().from(rooms).where(eq(rooms.ownerId, userId));
+    const allTenants = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.ownerId, userId));
     const allPayments = await db
       .select()
       .from(payments)
+      .where(eq(payments.ownerId, userId))
       .orderBy(desc(payments.id));
 
     const activeTenants = allTenants.filter((t) => t.status === "active");
@@ -38,7 +47,7 @@ export async function GET() {
     const monthRevenue = monthPayments.reduce((s, p) => s + (p.amount || 0), 0);
     const allTimeRevenue = allPayments.reduce((s, p) => s + (p.amount || 0), 0);
 
-    const debts = await computeDebts();
+    const debts = await computeDebts(userId);
     const totalDebt = debts.reduce((s, d) => s + d.balance, 0);
     const overdueCount = debts.filter((d) => d.balance > 0).length;
     const topDebts = debts

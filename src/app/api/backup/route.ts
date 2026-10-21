@@ -8,19 +8,25 @@ import {
   contractSettings,
   smsTemplates,
 } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { getSessionUserId } from "@/lib/auth";
+import { unauthorized } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const [landlord, allRooms, allTenants, allPayments, contracts, templates] =
       await Promise.all([
-        db.select().from(landlordProfile),
-        db.select().from(rooms),
-        db.select().from(tenants),
-        db.select().from(payments),
-        db.select().from(contractSettings),
-        db.select().from(smsTemplates),
+        db.select().from(landlordProfile).where(eq(landlordProfile.ownerId, userId)),
+        db.select().from(rooms).where(eq(rooms.ownerId, userId)),
+        db.select().from(tenants).where(eq(tenants.ownerId, userId)),
+        db.select().from(payments).where(eq(payments.ownerId, userId)),
+        db.select().from(contractSettings).where(eq(contractSettings.ownerId, userId)),
+        db.select().from(smsTemplates).where(eq(smsTemplates.ownerId, userId)),
       ]);
 
     const payload = {
@@ -45,18 +51,21 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const body = await req.json();
     const action = body.action as string;
 
     if (action === "clear") {
-      // Delete in FK-safe order
-      await db.delete(payments);
-      await db.delete(tenants);
-      await db.delete(rooms);
-      await db.delete(landlordProfile);
-      await db.delete(contractSettings);
-      await db.delete(smsTemplates);
+      // Delete this owner's rows in FK-safe order
+      await db.delete(payments).where(eq(payments.ownerId, userId));
+      await db.delete(tenants).where(eq(tenants.ownerId, userId));
+      await db.delete(rooms).where(eq(rooms.ownerId, userId));
+      await db.delete(landlordProfile).where(eq(landlordProfile.ownerId, userId));
+      await db.delete(contractSettings).where(eq(contractSettings.ownerId, userId));
+      await db.delete(smsTemplates).where(eq(smsTemplates.ownerId, userId));
       return NextResponse.json({ ok: true, message: "Data zote zimefutwa" });
     }
 
@@ -84,20 +93,20 @@ export async function POST(req: NextRequest) {
         return s.length > 0 ? s : null;
       };
 
-      // Clear existing
-      await db.delete(payments);
-      await db.delete(tenants);
-      await db.delete(rooms);
-      await db.delete(landlordProfile);
-      await db.delete(contractSettings);
-      await db.delete(smsTemplates);
+      // Clear this owner's existing data first
+      await db.delete(payments).where(eq(payments.ownerId, userId));
+      await db.delete(tenants).where(eq(tenants.ownerId, userId));
+      await db.delete(rooms).where(eq(rooms.ownerId, userId));
+      await db.delete(landlordProfile).where(eq(landlordProfile.ownerId, userId));
+      await db.delete(contractSettings).where(eq(contractSettings.ownerId, userId));
+      await db.delete(smsTemplates).where(eq(smsTemplates.ownerId, userId));
 
-      // Import — strip ids so serials regenerate, keep relations by order
-      // For simplicity restore with original ids where possible using raw inserts
+      // Import — strip ids so serials regenerate, keep relations by map
       if (Array.isArray(data.landlordProfile)) {
         for (const row of data.landlordProfile.slice(0, 10)) {
           if (typeof row !== "object" || row === null) continue;
           await db.insert(landlordProfile).values({
+            ownerId: userId,
             fullName: cleanText(row.fullName, 120) || "Haijulikani",
             phone: cleanText(row.phone, 24) || "—",
             nida: cleanOpt(row.nida, 32),
@@ -114,6 +123,7 @@ export async function POST(req: NextRequest) {
           const inserted = await db
             .insert(rooms)
             .values({
+              ownerId: userId,
               name: cleanText(row.name, 120) || "Chumba",
               monthlyRent: Number.isFinite(Number(row.monthlyRent))
                 ? Math.max(0, Math.trunc(Number(row.monthlyRent)))
@@ -135,6 +145,7 @@ export async function POST(req: NextRequest) {
           const inserted = await db
             .insert(tenants)
             .values({
+              ownerId: userId,
               fullName: cleanText(row.fullName, 120) || "Haijulikani",
               phone: cleanText(row.phone, 24) || "—",
               nida: cleanOpt(row.nida, 32),
@@ -167,6 +178,7 @@ export async function POST(req: NextRequest) {
           const newRoomId =
             row.roomId != null ? roomIdMap.get(row.roomId) ?? null : null;
           await db.insert(payments).values({
+            ownerId: userId,
             tenantId: newTenantId,
             roomId: newRoomId,
             amount,
@@ -188,6 +200,7 @@ export async function POST(req: NextRequest) {
         for (const row of data.contractSettings.slice(0, 5)) {
           if (typeof row !== "object" || row === null) continue;
           await db.insert(contractSettings).values({
+            ownerId: userId,
             clauses: cleanOpt(row.clauses, 20000),
             defaultDurationMonths: Number.isFinite(Number(row.defaultDurationMonths))
               ? Math.min(120, Math.max(1, Math.trunc(Number(row.defaultDurationMonths))))
@@ -205,7 +218,7 @@ export async function POST(req: NextRequest) {
           const type = row.type === "reminder" ? "reminder" : "receipt";
           const content = cleanText(row.content, 5000);
           if (!content) continue;
-          await db.insert(smsTemplates).values({ type, content });
+          await db.insert(smsTemplates).values({ ownerId: userId, type, content });
         }
       }
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { smsTemplates, landlordProfile, tenants, rooms, payments } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   DEFAULT_RECEIPT_TEMPLATE,
   DEFAULT_REMINDER_TEMPLATE,
@@ -10,12 +10,20 @@ import {
   paymentMethodLabel,
 } from "@/lib/utils";
 import { str, optStr } from "@/lib/validate";
+import { getSessionUserId } from "@/lib/auth";
+import { unauthorized } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
-    const templates = await db.select().from(smsTemplates);
+    const templates = await db
+      .select()
+      .from(smsTemplates)
+      .where(eq(smsTemplates.ownerId, userId));
     const receipt =
       templates.find((t) => t.type === "receipt")?.content ?? DEFAULT_RECEIPT_TEMPLATE;
     const reminder =
@@ -29,6 +37,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const body = await req.json();
     const action = body.action as string;
@@ -44,14 +55,16 @@ export async function POST(req: NextRequest) {
         const existing = await db
           .select()
           .from(smsTemplates)
-          .where(eq(smsTemplates.type, type));
+          .where(and(eq(smsTemplates.ownerId, userId), eq(smsTemplates.type, type)));
         if (existing[0]) {
           await db
             .update(smsTemplates)
             .set({ content, updatedAt: new Date() })
-            .where(eq(smsTemplates.id, existing[0].id));
+            .where(and(eq(smsTemplates.id, existing[0].id), eq(smsTemplates.ownerId, userId)));
         } else {
-          await db.insert(smsTemplates).values({ type, content });
+          await db
+            .insert(smsTemplates)
+            .values({ ownerId: userId, type, content });
         }
       }
       return NextResponse.json({ ok: true });
@@ -68,7 +81,10 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "Chagua mpangaji" }, { status: 400 });
       }
 
-      const tenantRows = await db.select().from(tenants).where(eq(tenants.id, tenantId));
+      const tenantRows = await db
+        .select()
+        .from(tenants)
+        .where(and(eq(tenants.id, tenantId), eq(tenants.ownerId, userId)));
       const tenant = tenantRows[0];
       if (!tenant) {
         return NextResponse.json({ error: "Mpangaji hapatikani" }, { status: 404 });
@@ -76,7 +92,10 @@ export async function POST(req: NextRequest) {
 
       let room = null;
       if (tenant.roomId) {
-        const roomRows = await db.select().from(rooms).where(eq(rooms.id, tenant.roomId));
+        const roomRows = await db
+          .select()
+          .from(rooms)
+          .where(and(eq(rooms.id, tenant.roomId), eq(rooms.ownerId, userId)));
         room = roomRows[0] ?? null;
       }
 
@@ -85,17 +104,21 @@ export async function POST(req: NextRequest) {
         const payRows = await db
           .select()
           .from(payments)
-          .where(eq(payments.id, paymentId));
+          .where(and(eq(payments.id, paymentId), eq(payments.ownerId, userId)));
         payment = payRows[0] ?? null;
       }
 
       const landlord = await db
         .select()
         .from(landlordProfile)
+        .where(eq(landlordProfile.ownerId, userId))
         .orderBy(desc(landlordProfile.id))
         .limit(1);
 
-      const templates = await db.select().from(smsTemplates);
+      const templates = await db
+        .select()
+        .from(smsTemplates)
+        .where(eq(smsTemplates.ownerId, userId));
       let template =
         type === "reminder"
           ? templates.find((t) => t.type === "reminder")?.content ??

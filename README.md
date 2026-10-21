@@ -11,7 +11,7 @@
 
 *Karibu! KodiSalama inawapa wenye nyumba nchini Tanzania mfumo salama wa kusimamia vyumba vyao, wapangaji, malipo ya kodi, mikataba, na risiti za SMS — kwa Kiswahili.*
 
-**🌐 Live app: [kodisalama.vercel.app](https://kodisalama.vercel.app)** — imetumwa kwenye Vercel (Next.js 16) na PostgreSQL ya cloud (Neon). Ufikiaji ni kwa nenosiri la mmiliki.
+**🌐 Live app: [kodisalama.vercel.app](https://kodisalama.vercel.app)** — imetumwa kwenye Vercel (Next.js 16) na PostgreSQL ya cloud (Neon). Kila mmiliki anajenga akaunti yake mwenyewe kwa barua pepe na huchukuliwa data zake pekee.
 
 </div>
 
@@ -19,6 +19,7 @@
 
 ## ✨ Features
 
+- **👤 Multi-landlord accounts** — anyone can register a free account with email + password; every landlord sees **only their own** data (rooms, tenants, payments, debts, contracts) with owner-scoped queries enforced on every API route.
 - **📊 Dashibodi** — occupancy rate, monthly & all-time revenue, collection rate, top debtors and recent payments at a glance.
 - **🏢 Vyumba (Rooms)** — track rooms with rent, status and automatic occupancy when a tenant moves in.
 - **👥 Wapangaji (Tenants)** — full tenant records with NIDA, deposit, move-in date and room assignment; one active tenant per room is enforced server-side.
@@ -34,10 +35,12 @@ KodiSalama is designed to hold sensitive tenant data (names, phones, NIDA), so s
 
 | Layer | What you get |
 |---|---|
-| **Authentication** | Password login with HMAC-signed, HttpOnly, SameSite session cookies (12h, or 30 days with "remember me") |
+| **Accounts** | Open self-registration (`/register`) with email + password; passwords hashed with **scrypt** (N=16384) — plaintext is never stored or logged |
+| **Authentication** | HMAC-signed, HttpOnly, SameSite session cookies bound to your user ID (12h, or 30 days with "remember me") |
+| **Data isolation** | Every table carries an `ownerId`; every query, update and delete is filtered by it server-side — cross-account reads and writes return `404` |
 | **Route protection** | Next.js middleware guards every page and API route; unauthenticated requests get redirected (pages) or `401` (API). Health checks stay open for uptime monitors |
-| **Brute-force defense** | Login rate limiting (5 attempts / 15 min / IP) and constant-time password comparison |
-| **Input validation** | Strict server-side validation: phone/date/enum whitelists and length caps on every field — including backup import |
+| **Brute-force defense** | Rate limiting on login (5 fails / 15 min / IP) and registration (5 / hour / IP), constant-time password verification and timing-equalized responses for unknown emails |
+| **Input validation** | Strict server-side validation: phone/date/enum whitelists, email format checks and length caps on every field — including backup import |
 | **Security headers** | Content-Security-Policy, X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy, HSTS (production) |
 | **Parameterized queries** | All database access goes through Drizzle ORM — no string-built SQL |
 | **No secrets in git** | `.env` is git-ignored; `.env.example` documents every variable |
@@ -54,7 +57,7 @@ npm install
 
 # 2. Configure environment
 cp .env.example .env
-#    Edit .env: set DATABASE_URL, APP_PASSWORD (min 8 chars)
+#    Edit .env: set DATABASE_URL
 #    and APP_SESSION_SECRET (generate with: openssl rand -hex 32)
 
 # 3. Create the database tables
@@ -66,15 +69,14 @@ npm run dev        # development → http://localhost:3000
 npm run build && npm run start   # production
 ```
 
-Open **http://localhost:3000**, log in with `APP_PASSWORD`, and set up your landlord profile under **Mipangilio**.
+Open **http://localhost:3000**, create your account on the **Jisajili** (register) screen, and set up your landlord profile under **Mipangilio**.
 
 ### Environment variables
 
 | Variable | Required | Description |
 |---|---|---|
 | `DATABASE_URL` | ✅ | PostgreSQL connection string |
-| `APP_PASSWORD` | ✅ | Login password (min 8 characters) |
-| `APP_SESSION_SECRET` | ✅ | Random secret for signing sessions (`openssl rand -hex 32`) |
+| `APP_SESSION_SECRET` | ✅ | Random secret for signing sessions (`openssl rand -hex 32`) — rotating it logs everyone out |
 
 ### Scripts
 
@@ -99,15 +101,15 @@ Open **http://localhost:3000**, log in with `APP_PASSWORD`, and set up your land
 ```
 src/
 ├── app/
-│   ├── api/            # REST API: auth, rooms, tenants, payments,
+│   ├── api/            # REST API: auth (register/login/me), rooms, tenants, payments,
 │   │                   # debts, dashboard, reports, contracts, sms, backup, health
-│   ├── login/          # Standalone login screen
+│   ├── login/ register/  # Standalone auth screens
 │   ├── vyumba/ wapangaji/ malipo/ sms/ mikataba/ mipangilio/
 │   ├── layout.tsx      # Fonts, metadata, providers
 │   └── page.tsx        # Dashboard
 ├── components/         # AppShell, AppFrame, Modal, Toast, Icons
 ├── db/                 # Drizzle schema & pool
-├── lib/                # auth, validation, debts engine, formatting utils
+├── lib/                # auth, password (scrypt), rate-limit, validation, debts engine, utils
 └── middleware.ts       # Route protection
 ```
 

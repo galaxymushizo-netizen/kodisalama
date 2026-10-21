@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import {
   IconBuilding,
   IconChat,
@@ -33,6 +33,26 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [account, setAccount] = useState<{ fullName: string; email: string } | null>(
+    null
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled) setAccount({ fullName: data.fullName, email: data.email });
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const isActive = (href: string) =>
     href === "/" ? pathname === "/" : pathname.startsWith(href);
@@ -195,6 +215,16 @@ export function AppShell({ children }: { children: ReactNode }) {
               })}
             </nav>
             <div className="border-t border-slate-100 p-4">
+              {account && (
+                <div className="mb-3 truncate text-center">
+                  <div className="truncate text-sm font-bold text-slate-800">
+                    {account.fullName}
+                  </div>
+                  <div className="truncate text-[11px] text-slate-400">
+                    {account.email}
+                  </div>
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => {

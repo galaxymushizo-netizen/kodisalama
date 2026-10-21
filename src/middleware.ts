@@ -7,12 +7,17 @@ import {
 
 /**
  * Protects every page and API route. Unauthenticated visitors are redirected
- * to /login (pages) or get a 401 JSON response (API). Health checks stay open.
+ * to /login (pages) or get a 401 JSON response (API). Auth endpoints and
+ * health checks stay open. Each signed-in visitor carries a signed session
+ * bound to their user id; API routes additionally scope every query by that
+ * id (defense in depth).
  */
 
 const PUBLIC_PATHS = new Set<string>([
   "/login",
+  "/register",
   "/api/auth/login",
+  "/api/auth/register",
   "/api/auth/logout",
   "/api/health",
 ]);
@@ -40,7 +45,7 @@ export async function middleware(req: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Authentication is not configured. Set APP_PASSWORD and APP_SESSION_SECRET (see .env.example).",
+            "Authentication is not configured. Set APP_SESSION_SECRET (see .env.example).",
         },
         { status: 503 }
       );
@@ -53,9 +58,9 @@ export async function middleware(req: NextRequest) {
 
   const token = req.cookies.get(SESSION_COOKIE)?.value;
   const secret = process.env.APP_SESSION_SECRET ?? "";
-  const valid = await verifySessionToken(token, secret);
+  const userId = await verifySessionToken(token, secret);
 
-  if (valid) {
+  if (userId !== null) {
     return NextResponse.next();
   }
 

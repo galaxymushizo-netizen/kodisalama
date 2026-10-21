@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { tenants, rooms } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import {
   str,
   optStr,
@@ -10,17 +10,29 @@ import {
   isIsoDate,
   TENANT_STATUSES,
 } from "@/lib/validate";
+import { getSessionUserId } from "@/lib/auth";
+import { unauthorized } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get("q") ?? "").trim().toLowerCase();
     const status = searchParams.get("status"); // active | moved_out | all
 
-    const allTenants = await db.select().from(tenants).orderBy(desc(tenants.id));
-    const allRooms = await db.select().from(rooms);
+    const allTenants = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.ownerId, userId))
+      .orderBy(desc(tenants.id));
+    const allRooms = await db
+      .select()
+      .from(rooms)
+      .where(eq(rooms.ownerId, userId));
     const roomMap = new Map(allRooms.map((r) => [r.id, r]));
 
     let result = allTenants.map((t) => ({
@@ -52,6 +64,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const body = await req.json();
     const fullName = str(body.fullName, 120);
@@ -85,16 +100,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Chumba si sahihi" }, { status: 400 });
     }
 
-    // If assigning room, ensure it's free
+    // If assigning room, ensure it's free (room must belong to this owner)
     if (roomId) {
-      const roomRows = await db.select().from(rooms).where(eq(rooms.id, roomId));
+      const roomRows = await db
+        .select()
+        .from(rooms)
+        .where(and(eq(rooms.id, roomId), eq(rooms.ownerId, userId)));
       if (!roomRows[0]) {
         return NextResponse.json({ error: "Chumba hakipatikani" }, { status: 400 });
       }
       const occupying = await db
         .select()
         .from(tenants)
-        .where(eq(tenants.roomId, roomId));
+        .where(and(eq(tenants.ownerId, userId), eq(tenants.roomId, roomId)));
       if (occupying.some((t) => t.status === "active")) {
         return NextResponse.json(
           { error: "Chumba hiki tayari kina mpangaji" },
@@ -102,12 +120,16 @@ export async function POST(req: NextRequest) {
         );
       }
       // mark room occupied
-      await db.update(rooms).set({ status: "occupied" }).where(eq(rooms.id, roomId));
+      await db
+        .update(rooms)
+        .set({ status: "occupied" })
+        .where(and(eq(rooms.id, roomId), eq(rooms.ownerId, userId)));
     }
 
     const result = await db
       .insert(tenants)
       .values({
+        ownerId: userId,
         fullName,
         phone,
         nida,
@@ -128,6 +150,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const body = await req.json();
     const id = parseInt(String(body.id), 10);
@@ -135,7 +160,10 @@ export async function PUT(req: NextRequest) {
       return NextResponse.json({ error: "Kitambulisho si sahihi" }, { status: 400 });
     }
 
-    const existing = await db.select().from(tenants).where(eq(tenants.id, id));
+    const existing = await db
+      .select()
+      .from(tenants)
+      .where(and(eq(tenants.id, id), eq(tenants.ownerId, userId)));
     if (!existing[0]) {
       return NextResponse.json({ error: "Mpangaji hapatikani" }, { status: 404 });
     }
@@ -187,7 +215,7 @@ export async function PUT(req: NextRequest) {
       updates.status = v;
     }
 
-    // Handle room change
+    // Handle room change (rooms must belong to this owner)
     if (body.roomId !== undefined) {
       const newRoomId =
         body.roomId === null || body.roomId === "" ? null : int(body.roomId);
@@ -202,14 +230,21 @@ export async function PUT(req: NextRequest) {
           await db
             .update(rooms)
             .set({ status: "empty" })
-            .where(eq(rooms.id, prev.roomId));
+            .where(and(eq(rooms.id, prev.roomId), eq(rooms.ownerId, userId)));
         }
         // occupy new room
         if (newRoomId) {
+          const roomRows = await db
+            .select()
+            .from(rooms)
+            .where(and(eq(rooms.id, newRoomId), eq(rooms.ownerId, userId)));
+          if (!roomRows[0]) {
+            return NextResponse.json({ error: "Chumba hakipatikani" }, { status: 400 });
+          }
           const occupying = await db
             .select()
             .from(tenants)
-            .where(eq(tenants.roomId, newRoomId));
+            .where(and(eq(tenants.ownerId, userId), eq(tenants.roomId, newRoomId)));
           if (
             occupying.some((t) => t.status === "active" && t.id !== id)
           ) {
@@ -221,7 +256,7 @@ export async function PUT(req: NextRequest) {
           await db
             .update(rooms)
             .set({ status: "occupied" })
-            .where(eq(rooms.id, newRoomId));
+            .where(and(eq(rooms.id, newRoomId), eq(rooms.ownerId, userId)));
         }
         updates.roomId = newRoomId;
       }
@@ -232,14 +267,14 @@ export async function PUT(req: NextRequest) {
       await db
         .update(rooms)
         .set({ status: "empty" })
-        .where(eq(rooms.id, prev.roomId));
+        .where(and(eq(rooms.id, prev.roomId), eq(rooms.ownerId, userId)));
       updates.roomId = null;
     }
 
     const result = await db
       .update(tenants)
       .set(updates)
-      .where(eq(tenants.id, id))
+      .where(and(eq(tenants.id, id), eq(tenants.ownerId, userId)))
       .returning();
 
     return NextResponse.json(result[0]);
@@ -250,6 +285,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const { searchParams } = new URL(req.url);
     const id = parseInt(searchParams.get("id") ?? "", 10);
@@ -257,15 +295,23 @@ export async function DELETE(req: NextRequest) {
       return NextResponse.json({ error: "Kitambulisho si sahihi" }, { status: 400 });
     }
 
-    const existing = await db.select().from(tenants).where(eq(tenants.id, id));
-    if (existing[0]?.roomId) {
+    const existing = await db
+      .select()
+      .from(tenants)
+      .where(and(eq(tenants.id, id), eq(tenants.ownerId, userId)));
+    if (!existing[0]) {
+      return NextResponse.json({ error: "Mpangaji hapatikani" }, { status: 404 });
+    }
+    if (existing[0].roomId) {
       await db
         .update(rooms)
         .set({ status: "empty" })
-        .where(eq(rooms.id, existing[0].roomId));
+        .where(and(eq(rooms.id, existing[0].roomId), eq(rooms.ownerId, userId)));
     }
 
-    await db.delete(tenants).where(eq(tenants.id, id));
+    await db
+      .delete(tenants)
+      .where(and(eq(tenants.id, id), eq(tenants.ownerId, userId)));
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);

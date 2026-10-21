@@ -5,12 +5,12 @@ import { type ReactNode } from "react";
 import { AppShell } from "./AppShell";
 
 /**
- * Renders the app chrome everywhere except the login screen, which has its
- * own standalone layout.
+ * Renders the app chrome everywhere except the auth screens (login/register),
+ * which have their own standalone layouts.
  */
 export function AppFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  if (pathname === "/login") {
+  if (pathname === "/login" || pathname === "/register") {
     return <>{children}</>;
   }
   return <AppShell>{children}</AppShell>;

@@ -1,18 +1,30 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { payments, tenants, rooms } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { computeDebts } from "@/lib/debts";
 import { currentPeriodMonth } from "@/lib/utils";
+import { getSessionUserId } from "@/lib/auth";
+import { unauthorized } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
-/** Monthly summary report for landlord */
+/** Monthly summary report for the signed-in landlord */
 export async function GET() {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
-    const allPayments = await db.select().from(payments);
-    const allTenants = await db.select().from(tenants);
-    const allRooms = await db.select().from(rooms);
-    const debts = await computeDebts();
+    const allPayments = await db
+      .select()
+      .from(payments)
+      .where(eq(payments.ownerId, userId));
+    const allTenants = await db
+      .select()
+      .from(tenants)
+      .where(eq(tenants.ownerId, userId));
+    const allRooms = await db.select().from(rooms).where(eq(rooms.ownerId, userId));
+    const debts = await computeDebts(userId);
     const period = currentPeriodMonth();
 
     // Group revenue by period month

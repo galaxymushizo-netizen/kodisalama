@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { tenants, payments, rooms } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export type TenantDebt = {
   tenantId: number;
@@ -16,22 +16,38 @@ export type TenantDebt = {
   moveInDate: string | null;
 };
 
-function monthsBetween(start: Date, end: Date): number {
-  const y = end.getFullYear() - start.getFullYear();
-  const m = end.getMonth() - start.getMonth();
-  let total = y * 12 + m + 1; // inclusive of current month
-  // If end day is before start day in month, still count current as due for rent systems often
-  if (total < 0) return 0;
-  return total;
+/**
+ * Count rent months due from the move-in month through the current month,
+ * inclusive. Parsing "YYYY-MM-DD" with `new Date()` would interpret it as UTC
+ * midnight and roll the date into the previous month on west-of-Greenwich
+ * servers, inflating debts by one month — so read the string directly.
+ */
+function monthsDueSince(moveInDate: string, now: Date): number {
+  const head = moveInDate.slice(0, 10);
+  const match = /^(\d{4})-(\d{2})/.exec(head);
+  if (!match) return -1; // unparsable — caller falls back
+  const startYear = Number(match[1]);
+  const startMonth = Number(match[2]); // 1–12
+  const endYear = now.getUTCFullYear();
+  const endMonth = now.getUTCMonth() + 1; // 1–12
+  const total = (endYear - startYear) * 12 + (endMonth - startMonth) + 1;
+  return Math.max(0, total);
 }
 
-export async function computeDebts(): Promise<TenantDebt[]> {
+/** Debt computation scoped strictly to one owner's tenants/payments/rooms. */
+export async function computeDebts(ownerId: number): Promise<TenantDebt[]> {
   const allTenants = await db
     .select()
     .from(tenants)
-    .where(eq(tenants.status, "active"));
-  const allPayments = await db.select().from(payments);
-  const allRooms = await db.select().from(rooms);
+    .where(and(eq(tenants.ownerId, ownerId), eq(tenants.status, "active")));
+  const allPayments = await db
+    .select()
+    .from(payments)
+    .where(eq(payments.ownerId, ownerId));
+  const allRooms = await db
+    .select()
+    .from(rooms)
+    .where(eq(rooms.ownerId, ownerId));
   const roomMap = new Map(allRooms.map((r) => [r.id, r]));
 
   const now = new Date();
@@ -44,10 +60,8 @@ export async function computeDebts(): Promise<TenantDebt[]> {
 
     let monthsDue = 0;
     if (t.moveInDate) {
-      const start = new Date(String(t.moveInDate));
-      if (!isNaN(start.getTime())) {
-        monthsDue = monthsBetween(start, now);
-      }
+      const computed = monthsDueSince(String(t.moveInDate), now);
+      monthsDue = computed >= 0 ? computed : rent > 0 ? 1 : 0;
     } else {
       // no move-in date: assume 1 month due if rent > 0
       monthsDue = rent > 0 ? 1 : 0;

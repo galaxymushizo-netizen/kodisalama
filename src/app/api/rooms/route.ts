@@ -1,24 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { rooms, tenants } from "@/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { str, optStr, int, ROOM_STATUSES } from "@/lib/validate";
+import { getSessionUserId } from "@/lib/auth";
+import { unauthorized } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const { searchParams } = new URL(req.url);
     const q = (searchParams.get("q") ?? "").trim().toLowerCase();
     const status = searchParams.get("status"); // empty | occupied | all
 
-    const allRooms = await db.select().from(rooms).orderBy(desc(rooms.id));
+    const allRooms = await db
+      .select()
+      .from(rooms)
+      .where(eq(rooms.ownerId, userId))
+      .orderBy(desc(rooms.id));
 
     // Get active tenants mapped by room
     const activeTenants = await db
       .select()
       .from(tenants)
-      .where(eq(tenants.status, "active"));
+      .where(and(eq(tenants.ownerId, userId), eq(tenants.status, "active")));
 
     const tenantByRoom = new Map(
       activeTenants.filter((t) => t.roomId != null).map((t) => [t.roomId!, t])
@@ -58,6 +67,9 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const body = await req.json();
     const name = str(body.name, 120);
@@ -74,6 +86,7 @@ export async function POST(req: NextRequest) {
     const result = await db
       .insert(rooms)
       .values({
+        ownerId: userId,
         name,
         monthlyRent,
         description,
@@ -89,6 +102,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const body = await req.json();
     const id = parseInt(String(body.id), 10);
@@ -129,7 +145,7 @@ export async function PUT(req: NextRequest) {
     const result = await db
       .update(rooms)
       .set(updates)
-      .where(eq(rooms.id, id))
+      .where(and(eq(rooms.id, id), eq(rooms.ownerId, userId)))
       .returning();
 
     if (!result[0]) {
@@ -143,6 +159,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const userId = await getSessionUserId();
+  if (!userId) return unauthorized();
+
   try {
     const { searchParams } = new URL(req.url);
     const id = parseInt(searchParams.get("id") ?? "", 10);
@@ -154,7 +173,7 @@ export async function DELETE(req: NextRequest) {
     const active = await db
       .select()
       .from(tenants)
-      .where(eq(tenants.roomId, id));
+      .where(and(eq(tenants.ownerId, userId), eq(tenants.roomId, id)));
     const hasActive = active.some((t) => t.status === "active");
     if (hasActive) {
       return NextResponse.json(
@@ -163,7 +182,13 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    await db.delete(rooms).where(eq(rooms.id, id));
+    const deleted = await db
+      .delete(rooms)
+      .where(and(eq(rooms.id, id), eq(rooms.ownerId, userId)))
+      .returning({ id: rooms.id });
+    if (!deleted[0]) {
+      return NextResponse.json({ error: "Chumba hakipatikani" }, { status: 404 });
+    }
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error(e);

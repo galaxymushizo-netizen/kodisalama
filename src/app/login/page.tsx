@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { IconKey } from "@/components/Icons";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +22,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, remember }),
+        body: JSON.stringify({ email, password, remember }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -57,13 +59,29 @@ export default function LoginPage() {
         >
           <label className="block">
             <span className="mb-1.5 block text-sm font-medium text-slate-700">
+              Barua pepe
+            </span>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              autoFocus
+              required
+              maxLength={254}
+              autoComplete="email"
+              placeholder="juma@mfano.com"
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-[15px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-600 focus:bg-white focus:ring-2 focus:ring-emerald-600/20"
+            />
+          </label>
+
+          <label className="mt-3 block">
+            <span className="mb-1.5 block text-sm font-medium text-slate-700">
               Neno la Siri
             </span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              autoFocus
               required
               autoComplete="current-password"
               placeholder="••••••••"
@@ -101,8 +119,14 @@ export default function LoginPage() {
             Ingia
           </button>
 
-          <p className="mt-4 text-center text-xs leading-relaxed text-slate-400">
-            Ufikiaji ni kwa mmiliki tu. Ikiwa umesahau neno la siri, wasiliana na msimamizi wa mfumo.
+          <p className="mt-4 text-center text-xs leading-relaxed text-slate-500">
+            Huna akaunti?{" "}
+            <Link
+              href="/register"
+              className="font-semibold text-emerald-700 hover:underline"
+            >
+              Jisajili bure
+            </Link>
           </p>
         </form>
 
