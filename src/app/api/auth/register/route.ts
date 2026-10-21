@@ -63,6 +63,12 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  if (body.termsAccepted !== true) {
+    return NextResponse.json(
+      { error: "Lazima ukubali Masharti ya Matumizi na Sera ya Faragha." },
+      { status: 400 }
+    );
+  }
 
   const passwordHash = await hashPassword(password);
 
@@ -70,7 +76,7 @@ export async function POST(req: NextRequest) {
   try {
     const inserted = await db
       .insert(users)
-      .values({ email, passwordHash, fullName })
+      .values({ email, passwordHash, fullName, termsAcceptedAt: new Date() })
       .returning({ id: users.id });
     userId = inserted[0].id;
   } catch (e) {

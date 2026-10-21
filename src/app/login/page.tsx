@@ -131,7 +131,15 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-[11px] text-emerald-100/60">
-          KodiSalama · Ilindwa kwa nenosiri · 🇹🇿
+          KodiSalama · Ilindwa kwa nenosiri ·{" "}
+          <Link href="/terms" target="_blank" className="underline hover:text-emerald-50">
+            Masharti
+          </Link>{" "}
+          ·{" "}
+          <Link href="/privacy" target="_blank" className="underline hover:text-emerald-50">
+            Faragha
+          </Link>{" "}
+          · 🇹🇿
         </p>
       </div>
     </div>

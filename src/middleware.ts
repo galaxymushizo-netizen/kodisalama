@@ -16,6 +16,8 @@ import {
 const PUBLIC_PATHS = new Set<string>([
   "/login",
   "/register",
+  "/privacy",
+  "/terms",
   "/api/auth/login",
   "/api/auth/register",
   "/api/auth/logout",

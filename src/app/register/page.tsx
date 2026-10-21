@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [remember, setRemember] = useState(true);
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,12 +24,16 @@ export default function RegisterPage() {
       setError("Maneno ya siri hayafanani.");
       return;
     }
+    if (!accepted) {
+      setError("Lazima ukubali Masharti ya Matumizi na Sera ya Faragha.");
+      return;
+    }
     setLoading(true);
     try {
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fullName, email, password, remember }),
+        body: JSON.stringify({ fullName, email, password, remember, termsAccepted: accepted }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -138,6 +143,35 @@ export default function RegisterPage() {
             Nikumbuke kwenye kifaa hiki (siku 30)
           </label>
 
+          <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-2xl bg-emerald-50 px-4 py-3 text-sm text-slate-700 ring-1 ring-emerald-100">
+            <input
+              type="checkbox"
+              checked={accepted}
+              onChange={(e) => setAccepted(e.target.checked)}
+              required
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-emerald-300 accent-emerald-700"
+            />
+            <span>
+              Nimeisoma na <strong className="font-semibold">nakubali</strong>{" "}
+              <Link
+                href="/terms"
+                target="_blank"
+                className="font-semibold text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-800"
+              >
+                Masharti ya Matumizi
+              </Link>{" "}
+              na{" "}
+              <Link
+                href="/privacy"
+                target="_blank"
+                className="font-semibold text-emerald-700 underline decoration-emerald-300 underline-offset-2 hover:text-emerald-800"
+              >
+                Sera ya Faragha
+              </Link>
+              , pamoja na namna KodiSalama inavyofanya kazi.
+            </span>
+          </label>
+
           {error && (
             <p
               role="alert"
@@ -170,7 +204,15 @@ export default function RegisterPage() {
         </form>
 
         <p className="mt-6 text-center text-[11px] text-emerald-100/60">
-          KodiSalama · Kila mmiliki ana akaunti yake · 🇹🇿
+          KodiSalama · Kila mmiliki ana akaunti yake ·{" "}
+          <Link href="/terms" target="_blank" className="underline hover:text-emerald-50">
+            Masharti
+          </Link>{" "}
+          ·{" "}
+          <Link href="/privacy" target="_blank" className="underline hover:text-emerald-50">
+            Faragha
+          </Link>{" "}
+          · 🇹🇿
         </p>
       </div>
     </div>

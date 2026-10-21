@@ -1,6 +1,6 @@
 {
   "name": "kodisalama",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "KodiSalama — rental & tenant management for Tanzanian landlords: rooms, tenants, payments, contracts, SMS receipts and reminders.",
   "private": true,
   "scripts": {

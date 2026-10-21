@@ -26,6 +26,7 @@
 - **💰 Malipo (Payments)** — record payments via cash, M-Pesa, Tigo Pesa, Airtel Money or bank with period tracking and references.
 - **⚠️ Madeni (Debts)** — automatic rent-debt computation from move-in date vs. payments, with partial/overdue status per tenant.
 - **💬 SMS / Risiti** — generate Swahili SMS receipts and payment reminders from customizable templates. Send instantly through the **Africa's Talking gateway** (per-landlord API key, sandbox mode for free testing, delivery history) or hand off to WhatsApp / the phone's SMS app.
+- **📜 Privacy Policy & Terms** — public [Sera ya Faragha](https://kodisalama.vercel.app/privacy) and [Masharti ya Matumizi](https://kodisalama.vercel.app/terms) pages; new users must read and accept them (timestamped) before an account is created.
 - **📄 Mikataba (Contracts)** — editable Swahili tenancy contract clauses with default duration and payment interval; generates a complete contract data pack per tenant.
 - **🛟 Backup & Restore** — one-click JSON export/import of all data, plus a guarded "wipe all" action. Your data stays yours.
 
