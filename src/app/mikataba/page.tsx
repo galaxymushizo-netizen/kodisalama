@@ -285,7 +285,7 @@ export default function MikatabaPage() {
             {/* Official Coat of Arms of Tanzania (Wikimedia Commons) */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/emblems/tanzania-coat-of-arms.png"
+              src="/emblems/tanzania-coat-of-arms.svg"
               alt="Nembo ya Taifa la Jamhuri ya Muungano wa Tanzania"
               width={120}
               height={140}
