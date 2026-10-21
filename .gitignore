@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Next.js build output
+.next/
+out/
+build/
+next-env.d.ts
+
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Drizzle migrations output (schema is pushed with db:push)
+drizzle/meta/
+
+# Misc
+*.tsbuildinfo
+.DS_Store
+Thumbs.db
+npm-debug.log*
+
+# Local DB dumps
+*.sql
+*.dump
+.github/
