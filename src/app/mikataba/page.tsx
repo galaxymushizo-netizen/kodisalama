@@ -279,8 +279,19 @@ export default function MikatabaPage() {
           !showPreview && "no-print"
         )}
       >
-        {/* Official text header */}
+        {/* Official header with Tanzania flag */}
         <div className="mb-6 border-b-2 border-slate-800 pb-6 text-center font-serif">
+          <div className="mb-3 flex justify-center">
+            {/* Flag of Tanzania (Wikimedia Commons, public domain) */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/emblems/tanzania-flag.svg"
+              alt="Bendera ya Taifa la Jamhuri ya Muungano wa Tanzania"
+              width={96}
+              height={64}
+              className="mx-auto h-16 w-auto rounded-sm object-contain shadow-sm ring-1 ring-slate-200"
+            />
+          </div>
           <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-700">
             Jamhuri ya Muungano wa Tanzania
           </p>
